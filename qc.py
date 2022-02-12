@@ -1,8 +1,13 @@
 import numpy as np
 from numpy.random import Generator, default_rng
+from qulacs.gate import CNOT, CZ, SWAP
 from skqulacs.circuit import LearningCircuit
 from skqulacs.qnn import QNNClassifier
 from sklearn.metrics import f1_score
+
+class LearningCircuitEx(LearningCircuit):
+    def add_parametric_multi_Pauli_rotation_gate(self, target, pauli_id, initial_angle):
+        self._circuit.add_parametric_multi_Pauli_rotation_gate(target, pauli_id, initial_angle)
 
 # TODO: 乱数
 random_seed = 0
@@ -39,6 +44,34 @@ def _innser_conv_circuit1(circuit, src, dest):
     circuit.add_CNOT_gate(src, dest)
     return circuit
 
+def one_qubit_unitary(circuit, index):
+    angle = np.random.uniform(-np.pi, np.pi)
+    circuit.add_parametric_RX_gate(index, angle)
+    angle = np.random.uniform(-np.pi, np.pi)
+    circuit.add_parametric_RY_gate(index, angle)
+    angle = np.random.uniform(-np.pi, np.pi)
+    circuit.add_parametric_RZ_gate(index, angle)
+
+def two_qubit_unitary(circuit, target, pauli_ids):
+    angle = np.random.rand()
+    circuit.add_parametric_multi_Pauli_rotation_gate(target, pauli_ids, angle)
+
+def _innser_conv_circuit2(circuit, src, dest):
+    one_qubit_unitary(circuit, src)
+    one_qubit_unitary(circuit, dest)
+
+    target = [src, dest]
+    pauli_xx_ids = [1, 1]
+    two_qubit_unitary(circuit, target, pauli_xx_ids)
+    pauli_yy_ids = [2, 2]
+    two_qubit_unitary(circuit, target, pauli_yy_ids)
+    pauli_zz_ids = [3, 3]
+    two_qubit_unitary(circuit, target, pauli_zz_ids)
+
+    one_qubit_unitary(circuit, src)
+    one_qubit_unitary(circuit, dest)
+    return circuit
+
 def _innser_conv_circuitU5(circuit, src, dest):
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RX_gate(src, angle)
@@ -49,16 +82,10 @@ def _innser_conv_circuitU5(circuit, src, dest):
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RZ_gate(dest, angle)
 
-    # TODO: CRZをCNOTに分解
+    # TODO: CRZ
     # qml.CRZ(params[4], wires=[wires[1], wires[0]])
-    angle = np.random.uniform(-np.pi, np.pi)
-    circuit.add_parametric_RZ_gate(dest, angle) #.add_control_qubit(dest, 1)
-    circuit.add_CNOT_gate(dest, src)
-    # TODO: CRZをCNOTに分解
+    # TODO: CRZ
     # qml.CRZ(params[5], wires=[wires[0], wires[1]])
-    angle = np.random.uniform(-np.pi, np.pi)
-    circuit.add_parametric_RZ_gate(dest, angle) #.add_control_qubit(src, 1)
-    circuit.add_CNOT_gate(src, dest)
 
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RX_gate(src, angle)
@@ -74,12 +101,8 @@ def _innser_conv_circuitU5(circuit, src, dest):
 def _innser_conv_circuitU9(circuit, src, dest):
     circuit.add_H_gate(src)
     circuit.add_H_gate(dest)
-
-    # TODO: CZをCNOTに分解
     #circuit.add_CZ_gate(src, dest)
-    circuit.add_CNOT_gate(src, dest)
-    circuit.add_Z_gate(dest)
-
+    circuit.add_gate(CZ(src, dest))
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RX_gate(src, angle)
     angle = np.random.uniform(-np.pi, np.pi)
@@ -92,7 +115,7 @@ def _innser_conv_circuitU13(circuit, src, dest):
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RY_gate(dest, angle)
 
-    # TODO: CRZをCNOTに分解
+    # TODO: CRZ
     # qml.CRZ(params[2], wires=[wires[1], wires[0]])
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RZ_gate(dest, angle)
@@ -103,7 +126,7 @@ def _innser_conv_circuitU13(circuit, src, dest):
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RY_gate(dest, angle)
 
-    # TODO: CRZをCNOTに分解
+    # TODO: CRZ
     # qml.CRZ(params[5], wires=[wires[0], wires[1]])
     angle = np.random.uniform(-np.pi, np.pi)
     circuit.add_parametric_RZ_gate(dest, angle)
@@ -112,7 +135,8 @@ def _innser_conv_circuitU13(circuit, src, dest):
     return circuit
 
 def conv_circuit(circuit, src, dest):
-    return _innser_conv_circuit1(circuit, src, dest)
+    #return _innser_conv_circuit1(circuit, src, dest)
+    return _innser_conv_circuit2(circuit, src, dest)
     #return _innser_conv_circuitU5(circuit, src, dest)
     #return _innser_conv_circuitU9(circuit, src, dest)
     #return _innser_conv_circuitU13(circuit, src, dest)
@@ -129,13 +153,13 @@ def pooling_circuit(circuit, src, dest):
 
 def create_qcnn_ansatz(
     n_qubit: int, seed: int = 0
-) -> LearningCircuit:
+) -> LearningCircuitEx:
     # def preprocess_x(x: List[float], index: int) -> float:
     #     xa = x[index % len(x)]
     #     return xa
 
     rng = default_rng(seed)
-    circuit = LearningCircuit(n_qubit)
+    circuit = LearningCircuitEx(n_qubit)
     for i in range(n_qubit):
         circuit.add_input_RX_gate(i, lambda x : x)
 
@@ -187,6 +211,7 @@ def create_qcnn_ansatz(
     # # depth 3
     # circuit = conv_circuit(circuit, 6, 7)
     # circuit = pooling_circuit(circuit, 6, 7)
+
     return circuit
 
 
@@ -198,7 +223,10 @@ x_train, y_train, x_test, y_test = generate_data(nqubit)
 circuit = create_qcnn_ansatz(nqubit)
 
 num_class = 2
-solver="BFGS"
+#solver="BFGS"
+solver="Adam"
+#solver="Nelder-Mead"
+
 qcl = QNNClassifier(circuit, num_class, solver)
 
 maxiter = 20
